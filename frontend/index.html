@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EventHub — Event Booking Platform</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="js/app.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col" x-data="eventHubApp()" x-init="init()">
+
+  <!-- Toast Notification -->
+  <div x-show="toast.show" x-cloak x-transition
+    class="fixed bottom-5 right-5 z-50 px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white flex items-center gap-2.5"
+    :class="toast.type === 'error' ? 'bg-rose-600' : 'bg-slate-900'">
+    <i class="fa-solid" :class="toast.type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-check text-emerald-400'"></i>
+    <span x-text="toast.message"></span>
+  </div>
+
+  <!-- Navbar -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2.5 cursor-pointer" @click="activeTab = 'events'">
+        <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-sm">
+          <i class="fa-solid fa-ticket"></i>
+        </div>
+        <div>
+          <span class="text-lg font-bold tracking-tight text-slate-900">EventHub</span>
+          <span class="hidden sm:inline-block ml-2 text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-semibold">Campus &amp; Public Events</span>
+        </div>
+      </div>
+
+      <nav class="flex items-center gap-2 text-sm font-medium">
+        <button @click="activeTab = 'events'"
+          class="px-3 py-1.5 rounded-lg transition"
+          :class="activeTab === 'events' ? 'bg-indigo-50 text-indigo-700 font-semibold' : 'text-slate-600 hover:bg-slate-100'">
+          <i class="fa-regular fa-calendar mr-1"></i> Events
+        </button>
+
+        <template x-if="user">
+          <button @click="activeTab = 'bookings'; fetchBookings()"
+            class="px-3 py-1.5 rounded-lg transition"
+            :class="activeTab === 'bookings' ? 'bg-indigo-50 text-indigo-700 font-semibold' : 'text-slate-600 hover:bg-slate-100'">
+            <i class="fa-solid fa-receipt mr-1"></i> My Bookings
+          </button>
+        </template>
+
+        <template x-if="isAdmin">
+          <button @click="activeTab = 'admin'; fetchEvents(); fetchBookings()"
+            class="px-3 py-1.5 rounded-lg transition"
+            :class="activeTab === 'admin' ? 'bg-amber-50 text-amber-700 font-semibold' : 'text-slate-600 hover:bg-slate-100'">
+            <i class="fa-solid fa-shield-halved mr-1"></i> Admin Panel
+          </button>
+        </template>
+      </nav>
+
+      <div class="flex items-center gap-2">
+        <template x-if="!user">
+          <div class="flex items-center gap-2">
+            <button @click="openAuth('login')" class="px-3.5 py-1.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100">
+              Log In
+            </button>
+            <button @click="openAuth('register')" class="px-3.5 py-1.5 rounded-lg text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm">
+              Sign Up
+            </button>
+          </div>
+        </template>
+
+        <template x-if="user">
+          <div class="flex items-center gap-3">
+            <div class="text-right hidden sm:block">
+              <div class="text-xs font-bold text-slate-900" x-text="user.name"></div>
+              <div class="text-[11px] uppercase tracking-wider font-semibold"
+                :class="isAdmin ? 'text-amber-600' : 'text-slate-500'" x-text="user.role"></div>
+            </div>
+            <button @click="logout()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700">
+              <i class="fa-solid fa-right-from-bracket mr-1"></i> Logout
+            </button>
+          </div>
+        </template>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-6xl w-full mx-auto px-4 py-6">
+
+    <!-- TAB 1: BROWSE EVENTS -->
+    <section x-show="activeTab === 'events'" x-cloak>
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 class="text-2xl font-bold text-slate-900">Upcoming Events</h1>
+          <p class="text-sm text-slate-500">Discover and reserve seats for workshops, concerts, and tech talks.</p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="relative">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+            <input type="text" x-model="searchQuery" placeholder="Search events or venues..."
+              class="pl-8 pr-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 w-56" />
+          </div>
+          <select x-model="selectedCategory"
+            class="px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <template x-for="cat in categories" :key="cat">
+              <option :value="cat" x-text="cat"></option>
+            </template>
+          </select>
+        </div>
+      </div>
+
+      <div x-show="loading" class="text-center py-12 text-slate-500">
+        <i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i>
+        <p class="text-sm">Loading events...</p>
+      </div>
+
+      <div x-show="!loading && filteredEvents.length === 0" class="text-center py-12 bg-white rounded-2xl border border-slate-200">
+        <i class="fa-regular fa-calendar-xmark text-3xl text-slate-400 mb-2"></i>
+        <p class="text-slate-600 font-medium">No matching events found.</p>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <template x-for="ev in filteredEvents" :key="ev.id">
+          <article class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm card-hover flex flex-col">
+            <div class="relative h-44 bg-slate-200">
+              <img :src="ev.image_url || 'https://images.pexels.com/photos/30433578/pexels-photo-30433578.jpeg?auto=compress&cs=tinysrgb&w=800'"
+                :alt="ev.title" class="w-full h-full object-cover" />
+              <span class="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[11px] font-bold bg-white/90 text-slate-800 shadow-sm"
+                x-text="ev.category"></span>
+              <span class="absolute top-3 right-3 px-2.5 py-1 rounded-full text-[11px] font-bold shadow-sm"
+                :class="statusBadgeClass(ev.status)" x-text="ev.status"></span>
+            </div>
+
+            <div class="p-4 flex-1 flex flex-col">
+              <h2 class="text-lg font-bold text-slate-900 mb-1" x-text="ev.title"></h2>
+              <p class="text-xs text-slate-600 mb-3 line-clamp-2" x-text="ev.description"></p>
+
+              <div class="space-y-1.5 text-xs text-slate-600 mb-4 mt-auto">
+                <div><i class="fa-regular fa-clock w-4 text-indigo-500"></i> <span x-text="formatDate(ev.event_date)"></span></div>
+                <div><i class="fa-solid fa-location-dot w-4 text-indigo-500"></i> <span x-text="ev.venue"></span></div>
+                <div>
+                  <i class="fa-solid fa-chair w-4 text-indigo-500"></i>
+                  <span class="font-semibold" x-text="ev.available_seats"></span> / <span x-text="ev.total_seats"></span> seats left
+                </div>
+              </div>
+
+              <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+                <div class="text-base font-extrabold text-slate-900">
+                  <span x-text="ev.price === 0 ? 'Free' : '$' + ev.price"></span>
+                </div>
+                <button @click="openBookModal(ev)"
+                  :disabled="ev.status !== 'PUBLISHED' || ev.available_seats < 1"
+                  class="px-4 py-2 rounded-xl text-xs font-semibold transition shadow-sm"
+                  :class="ev.status === 'PUBLISHED' && ev.available_seats > 0
+                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                    : 'bg-slate-200 text-slate-500 cursor-not-allowed'">
+                  <span x-text="ev.available_seats < 1 ? 'Sold Out' : (ev.status === 'PUBLISHED' ? 'Book Now' : ev.status)"></span>
+                </button>
+              </div>
+            </div>
+          </article>
+        </template>
+      </div>
+    </section>
+
+    <!-- TAB 2: MY BOOKINGS -->
+    <section x-show="activeTab === 'bookings'" x-cloak>
+      <div class="mb-5">
+        <h1 class="text-2xl font-bold text-slate-900">My Bookings</h1>
+        <p class="text-sm text-slate-500">Track your ticket status (<code class="text-xs bg-slate-200 px-1 rounded">PENDING → CONFIRMED / CANCELLED</code>).</p>
+      </div>
+
+      <div x-show="bookings.length === 0" class="bg-white rounded-2xl border border-slate-200 p-10 text-center text-slate-500">
+        <i class="fa-solid fa-ticket text-3xl mb-2 text-slate-300"></i>
+        <p class="text-sm">You haven't booked any events yet.</p>
+      </div>
+
+      <div class="space-y-3">
+        <template x-for="b in bookings" :key="b.id">
+          <div class="bg-white rounded-xl border border-slate-200 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+            <div>
+              <div class="flex items-center gap-2 mb-1">
+                <h3 class="font-bold text-slate-900" x-text="b.event_title"></h3>
+                <span class="px-2 py-0.5 rounded-full text-[11px] font-bold" :class="statusBadgeClass(b.status)" x-text="b.status"></span>
+              </div>
+              <div class="text-xs text-slate-500 flex flex-wrap gap-x-4 gap-y-1">
+                <span><i class="fa-solid fa-location-dot mr-1"></i><span x-text="b.event_venue"></span></span>
+                <span><i class="fa-regular fa-clock mr-1"></i><span x-text="formatDate(b.event_date)"></span></span>
+                <span><i class="fa-solid fa-users mr-1"></i><span x-text="b.seats"></span> seat(s) — <strong x-text="'$' + b.total_amount"></strong></span>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button x-show="b.status === 'PENDING' || b.status === 'CONFIRMED'"
+                @click="changeBookingStatus(b.id, 'CANCELLED')"
+                class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200">
+                Cancel Booking
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </section>
+
+    <!-- TAB 3: ADMIN PANEL -->
+    <section x-show="activeTab === 'admin' && isAdmin" x-cloak class="space-y-8">
+      <!-- Events Management -->
+      <div>
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h1 class="text-2xl font-bold text-slate-900">Admin: Manage Events</h1>
+            <p class="text-xs text-slate-500">State Machine: <strong>DRAFT → PUBLISHED → COMPLETED / CANCELLED</strong></p>
+          </div>
+          <button @click="openCreateEvent()" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm">
+            <i class="fa-solid fa-plus mr-1"></i> Create Event
+          </button>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-x-auto shadow-sm">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase">
+              <tr>
+                <th class="px-4 py-3">Event</th>
+                <th class="px-4 py-3">Date &amp; Venue</th>
+                <th class="px-4 py-3">Seats</th>
+                <th class="px-4 py-3">Status</th>
+                <th class="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <template x-for="ev in events" :key="ev.id">
+                <tr class="hover:bg-slate-50/70">
+                  <td class="px-4 py-3 font-semibold text-slate-900" x-text="ev.title"></td>
+                  <td class="px-4 py-3 text-slate-600">
+                    <div x-text="formatDate(ev.event_date)"></div>
+                    <div class="text-[11px] text-slate-400" x-text="ev.venue"></div>
+                  </td>
+                  <td class="px-4 py-3" x-text="ev.available_seats + ' / ' + ev.total_seats"></td>
+                  <td class="px-4 py-3">
+                    <span class="px-2 py-0.5 rounded-full text-[11px] font-bold" :class="statusBadgeClass(ev.status)" x-text="ev.status"></span>
+                  </td>
+                  <td class="px-4 py-3 text-right space-x-1 whitespace-nowrap">
+                    <button x-show="ev.status === 'DRAFT'" @click="changeEventStatus(ev.id, 'PUBLISHED')"
+                      class="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Publish</button>
+                    <button x-show="ev.status === 'PUBLISHED'" @click="changeEventStatus(ev.id, 'COMPLETED')"
+                      class="px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold">Complete</button>
+                    <button x-show="ev.status === 'PUBLISHED'" @click="changeEventStatus(ev.id, 'CANCELLED')"
+                      class="px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-700 text-white font-semibold">Cancel</button>
+                    <button x-show="ev.status === 'DRAFT' || ev.status === 'PUBLISHED'" @click="openEditEvent(ev)"
+                      class="px-2.5 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold">Edit</button>
+                    <button x-show="ev.status !== 'PUBLISHED'" @click="deleteEvent(ev.id)"
+                      class="px-2.5 py-1 rounded bg-rose-100 hover:bg-rose-200 text-rose-700 font-semibold">Delete</button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Bookings Management -->
+      <div>
+        <h2 class="text-xl font-bold text-slate-900 mb-1">Admin: All User Bookings</h2>
+        <p class="text-xs text-slate-500 mb-3">State Machine: <strong>PENDING → CONFIRMED / CANCELLED</strong></p>
+
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-x-auto shadow-sm">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase">
+              <tr>
+                <th class="px-4 py-3">User</th>
+                <th class="px-4 py-3">Event</th>
+                <th class="px-4 py-3">Seats / Total</th>
+                <th class="px-4 py-3">Status</th>
+                <th class="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <template x-for="b in bookings" :key="b.id">
+                <tr class="hover:bg-slate-50/70">
+                  <td class="px-4 py-3">
+                    <div class="font-semibold text-slate-900" x-text="b.user_name"></div>
+                    <div class="text-[11px] text-slate-400" x-text="b.user_email"></div>
+                  </td>
+                  <td class="px-4 py-3 font-medium text-slate-800" x-text="b.event_title"></td>
+                  <td class="px-4 py-3" x-text="b.seats + ' ($' + b.total_amount + ')'"></td>
+                  <td class="px-4 py-3">
+                    <span class="px-2 py-0.5 rounded-full text-[11px] font-bold" :class="statusBadgeClass(b.status)" x-text="b.status"></span>
+                  </td>
+                  <td class="px-4 py-3 text-right space-x-1 whitespace-nowrap">
+                    <button x-show="b.status === 'PENDING'" @click="changeBookingStatus(b.id, 'CONFIRMED')"
+                      class="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Confirm</button>
+                    <button x-show="b.status === 'PENDING' || b.status === 'CONFIRMED'" @click="changeBookingStatus(b.id, 'CANCELLED')"
+                      class="px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-700 text-white font-semibold">Cancel</button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Auth Modal -->
+  <div x-show="showAuthModal" x-cloak class="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl" @click.away="showAuthModal = false">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-bold text-slate-900" x-text="authMode === 'login' ? 'Log In to EventHub' : 'Create Account'"></h2>
+        <button @click="showAuthModal = false" class="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+      </div>
+
+      <!-- Quick Demo Fill for Presentation -->
+      <div class="mb-4 p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+        <div class="font-semibold text-slate-600 mb-1.5">Quick Demo Fill:</div>
+        <div class="flex gap-2">
+          <button type="button" @click="fillDemo('user')" class="flex-1 py-1 px-2 rounded bg-indigo-50 text-indigo-700 font-semibold hover:bg-indigo-100">Student User</button>
+          <button type="button" @click="fillDemo('admin')" class="flex-1 py-1 px-2 rounded bg-amber-50 text-amber-700 font-semibold hover:bg-amber-100">Admin</button>
+        </div>
+      </div>
+
+      <form @submit.prevent="submitAuth()" class="space-y-3">
+        <div x-show="authMode === 'register'">
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Full Name</label>
+          <input type="text" x-model="authForm.name" :required="authMode === 'register'"
+            class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Email</label>
+          <input type="email" x-model="authForm.email" required
+            class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Password</label>
+          <input type="password" x-model="authForm.password" required minlength="6"
+            class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <button type="submit" class="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold">
+          <span x-text="authMode === 'login' ? 'Log In' : 'Sign Up'"></span>
+        </button>
+      </form>
+
+      <p class="mt-4 text-center text-xs text-slate-500">
+        <span x-text="authMode === 'login' ? 'New here?' : 'Already have an account?'"></span>
+        <button @click="authMode = authMode === 'login' ? 'register' : 'login'" class="text-indigo-600 font-semibold hover:underline ml-1"
+          x-text="authMode === 'login' ? 'Create an account' : 'Log In'"></button>
+      </p>
+    </div>
+  </div>
+
+  <!-- Book Tickets Modal -->
+  <div x-show="showBookModal" x-cloak class="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl" @click.away="showBookModal = false">
+      <div class="flex justify-between items-center mb-3">
+        <h2 class="text-lg font-bold text-slate-900">Book Tickets</h2>
+        <button @click="showBookModal = false" class="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+      </div>
+      <template x-if="bookingEvent">
+        <div>
+          <p class="text-sm font-semibold text-indigo-700 mb-1" x-text="bookingEvent.title"></p>
+          <p class="text-xs text-slate-500 mb-4" x-text="bookingEvent.venue + ' • ' + formatDate(bookingEvent.event_date)"></p>
+
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Number of Seats (Max 5)</label>
+          <input type="number" x-model.number="bookingSeats" min="1" :max="Math.min(5, bookingEvent.available_seats)"
+            class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg mb-4" />
+
+          <div class="flex justify-between items-center bg-slate-50 p-3 rounded-xl mb-4 text-sm">
+            <span class="text-slate-600">Total Amount</span>
+            <span class="font-extrabold text-slate-900" x-text="'$' + (bookingSeats * bookingEvent.price)"></span>
+          </div>
+
+          <button @click="submitBooking()" class="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold">
+            Confirm Reservation
+          </button>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- Admin Create/Edit Event Modal -->
+  <div x-show="showEventModal" x-cloak class="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl my-8" @click.away="showEventModal = false">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-bold text-slate-900" x-text="editingEventId ? 'Edit Event' : 'Create New Event'"></h2>
+        <button @click="showEventModal = false" class="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+      </div>
+
+      <form @submit.prevent="saveEvent()" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Title</label>
+          <input type="text" x-model="eventForm.title" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Description</label>
+          <textarea x-model="eventForm.description" rows="2" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Category</label>
+            <select x-model="eventForm.category" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+              <option>Music</option><option>Tech</option><option>Workshop</option><option>Food</option><option>General</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Venue</label>
+            <input type="text" x-model="eventForm.venue" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+          </div>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <div class="col-span-1">
+            <label class="block font-semibold text-slate-700 mb-1">Price ($)</label>
+            <input type="number" x-model.number="eventForm.price" min="0" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+          </div>
+          <div class="col-span-1">
+            <label class="block font-semibold text-slate-700 mb-1">Total Seats</label>
+            <input type="number" x-model.number="eventForm.total_seats" min="1" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+          </div>
+          <div class="col-span-1">
+            <label class="block font-semibold text-slate-700 mb-1">Date</label>
+            <input type="datetime-local" x-model="eventForm.event_date" required class="w-full px-2 py-2 border border-slate-300 rounded-lg text-xs" />
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Pexels Cover Image URL</label>
+          <input type="url" x-model="eventForm.image_url" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs mb-1.5" />
+          <div class="flex flex-wrap gap-1.5">
+            <template x-for="p in pexelsPresets" :key="p.label">
+              <button type="button" @click="eventForm.image_url = p.url"
+                class="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium" x-text="p.label"></button>
+            </template>
+          </div>
+        </div>
+        <button type="submit" class="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold mt-2">
+          <span x-text="editingEventId ? 'Save Changes' : 'Create Event (Draft)'"></span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+</body>
+</html>
